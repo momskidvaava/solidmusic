@@ -36,7 +36,7 @@ class ChatDB(Scaffold):
         chats = self.get_chat(chat_id)
         for chat in chats:
             if chat_id == chat["chat_id"]:
-                return "already_added"
+                return "already_added_chat"
             return
         self.cur.execute(
             "INSERT INTO chat_db VALUES (?, ?, ?, ?, ?)",
@@ -71,7 +71,6 @@ class ChatDB(Scaffold):
         for chat in chats:
             if quality == chat["quality"]:
                 return "quality_already_used"
-            return
         self.cur.execute(
             """
             UPDATE chat_db
