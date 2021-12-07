@@ -1,11 +1,16 @@
+import asyncio
 import random
 
-from pyrogram.errors import ChatIdInvalid, ChannelInvalid
-from pyrogram.raw.base import InputChannel, InputGroupCall
-from pyrogram.raw.functions.channels import GetFullChannel
-from pyrogram.raw.functions.messages import GetFullChat
+from pyrogram.errors import (
+    UserNotParticipant,
+    ChatAdminRequired,
+    ChannelPrivate,
+    ChatForbidden,
+    PeerIdInvalid,
+    UserAlreadyParticipant,
+)
 from pyrogram.raw.functions.phone import CreateGroupCall, DiscardGroupCall
-from pyrogram.raw.types import InputPeerChannel
+from pytgcalls.exceptions import GroupCallNotFound
 from pytgcalls.types import Update
 from pytgcalls.types.input_stream import AudioPiped, AudioVideoPiped
 from pytgcalls.types.input_stream.quality import (
@@ -27,8 +32,33 @@ from database.sudo_database import SudoDB
 
 
 class Methods(ChatDB, SudoDB):
-    def __init__(self):
-        super(Methods, self).__init__()
+    pass
+
+
+async def leave_from_inactive_call():
+    all_chat_id = []
+    async for chat in user.iter_dialogs():
+        chat_id = chat.chat.id
+        if chat.chat.type in ["group", "supergroup"]:
+            for call in call_py.calls:
+                call_chat_id = int(getattr(call, "chat_id"))
+                if call_chat_id in all_chat_id:
+                    pass
+                else:
+                    all_chat_id.append(call_chat_id)
+                call_status = getattr(call, "status")
+                try:
+                    if call_chat_id == chat_id and call_status == "not_playing":
+                        await user.leave_chat(chat_id)
+                    elif chat_id not in all_chat_id:
+                        await user.leave_chat(chat_id)
+                except UserNotParticipant:
+                    pass
+            if chat_id not in all_chat_id:
+                try:
+                    await user.leave_chat(chat_id)
+                except PeerIdInvalid:
+                    pass
 
 
 class Call:
@@ -93,6 +123,7 @@ class Call:
         title: str,
         duration: str,
         source_file: str,
+        link: str,
         stream_type: str,
     ):
         objects = {
@@ -100,52 +131,60 @@ class Call:
             "title": title,
             "duration": duration,
             "source_file": source_file,
+            "link": link,
             "stream_type": stream_type,
         }
         return self.playlist.insert_one(chat_id, objects)
 
     def is_call_active(self, chat_id: int):
         call = self.call
-        for active_call in call.active_calls:
-            return bool(chat_id == getattr(active_call, "chat_id"))
-        return False
-
-    async def _get_group_call(self, chat_id: int) -> InputGroupCall:
-        # Credit Userge
-        chat_peer = await self.user.resolve_peer(chat_id)
-        if isinstance(chat_peer, (InputPeerChannel, InputChannel)):
-            full_chat = (
-                await self.user.send(GetFullChannel(channel=chat_peer))
-            ).full_chat
-        else:
-            full_chat = (
-                await self.user.send(GetFullChat(chat_id=chat_peer.chat_id))
-            ).full_chat
-        if full_chat:
-            return full_chat.call
+        try:
+            if call.get_call(chat_id):
+                return True
+        except GroupCallNotFound:
+            return False
 
     async def start_call(self, chat_id: int):
         users = self.user
         try:
-            await users.send(
-                CreateGroupCall(
-                    peer=await users.resolve_peer(chat_id),
-                    random_id=random.randint(10000, 999999999),
+            is_active = self.is_call_active(chat_id)
+            if not is_active:
+                await users.send(
+                    CreateGroupCall(
+                        peer=await users.resolve_peer(chat_id),
+                        random_id=random.randint(10000, 999999999),
+                    )
                 )
-            )
-            await self.bot.send_message(chat_id, "call_started")
-        except (ChatIdInvalid, ChannelInvalid):
-            link = await self.bot.export_chat_invite_link(chat_id)
-            await users.join_chat(link)
-            user_id = (await users.get_me()).id
-            await self.bot.promote_member(chat_id, user_id)
-            await self.start_call(chat_id)
+                await self.bot.send_message(chat_id, "call_started")
+            else:
+                pass
+        except (ChannelPrivate, ChatForbidden):
+            try:
+                await self.bot.unban_member(chat_id, (await self.bot.get_me()).id)
+                await self.start_call(chat_id)
+            except PeerIdInvalid:
+                await users.send_message((await self.bot.get_me()).id, "/start")
+                await self.start_call(chat_id)
+            except (ChatForbidden, ChannelPrivate):
+                self.playlist.delete_chat(chat_id)
+                return await self.bot.send_message(chat_id, "user_banned")
+        except ChatAdminRequired:
+            try:
+                await self.bot.promote_member(chat_id, (await users.get_me()).id)
+                await self.start_call(chat_id)
+            except PeerIdInvalid:
+                await users.send_message((await self.bot.get_me()).id, "/start")
+                await self.bot.promote_member(chat_id, (await users.get_me()).id)
+                await self.start_call(chat_id)
 
     async def end_call(self, chat_id: int):
         # Credit Userge
-        call = await self._get_group_call(chat_id)
-        await self.user.send(DiscardGroupCall(call=call))
-        await self.bot.send_message(chat_id, "call_ended")
+        try:
+            call = await self.call.get_call(chat_id)
+            await self.user.send(DiscardGroupCall(call=call))
+            await self.bot.send_message(chat_id, "call_closed")
+        except GroupCallNotFound:
+            await self.bot.send_message(chat_id, "no_active_group_call")
 
     async def change_vol(self, chat_id: int, volume: int):
         call = self.call
@@ -180,38 +219,38 @@ class Call:
     async def _change_stream(self, chat_id: int):
         playlist = self.playlist
         playlist.delete_one(chat_id)
-        yt_url = playlist.get(chat_id)["yt_url"]
         title = playlist.get(chat_id)["title"]
         stream_type = playlist.get(chat_id)["stream_type"]
-        await self._stream_change(chat_id, yt_url, stream_type)
+        if stream_type in ["video", "music"]:
+            yt_url = playlist.get(chat_id)["yt_url"]
+            await self._stream_change(chat_id, yt_url, stream_type)
+        elif stream_type in ["local_video", "local_music"]:
+            await self._stream_change(chat_id, stream_type=stream_type)
         return title
 
-    async def _stream_change(self, chat_id: int, yt_url: str, stream_type: str):
+    async def _stream_change(self, chat_id: int, yt_url: str = None, stream_type: str = None):
         call = self.call
         if stream_type == "music":
-            audio_quality = self.db.get_chat(chat_id)[0]["quality"]
             url = get_audio_direct_link(yt_url)
-            if audio_quality == "low":
-                quality = LowQualityAudio()
-            elif audio_quality == "medium":
-                quality = MediumQualityAudio()
-            else:
-                quality = HighQualityAudio()
+            quality, _ = self.get_quality(chat_id)
             await call.change_stream(chat_id, AudioPiped(url, quality))
         elif stream_type == "video":
-            quality = self.db.get_chat(chat_id)[0]["quality"]
             url = get_video_direct_link(yt_url)
-            if quality == "low":
-                video_quality = LowQualityVideo()
-                audio_quality = LowQualityAudio()
-            elif quality == "medium":
-                video_quality = MediumQualityVideo()
-                audio_quality = MediumQualityAudio()
-            else:
-                video_quality = HighQualityVideo()
-                audio_quality = HighQualityAudio()
+            audio_quality, video_quality = self.get_quality(chat_id)
             await call.change_stream(
                 chat_id, AudioVideoPiped(url, audio_quality, video_quality)
+            )
+        elif stream_type == "local_music":
+            audio_quality, _ = self.get_quality(chat_id)
+            local_audio = self.playlist.get(chat_id)["source_file"]
+            await call.change_stream(
+                chat_id, AudioPiped(local_audio, audio_quality)
+            )
+        elif stream_type == "local_video":
+            audio_quality, video_quality = self.get_quality(chat_id)
+            source_file = self.playlist.get(chat_id)["source_file"]
+            await call.change_stream(
+                chat_id, AudioVideoPiped(source_file, audio_quality, video_quality)
             )
 
     async def check_playlist(self, chat_id: int):
@@ -220,7 +259,7 @@ class Call:
         if playlist and chat_id in playlist:
             if len(playlist[chat_id]) > 1:
                 title = await self._change_stream(chat_id)
-                await self.bot.send_message(chat_id, "track_changed", title)
+                await self.bot.send_message(chat_id, "track_changed", title, delete=5)
             elif len(playlist[chat_id]) == 1:
                 await call.leave_group_call(chat_id)
                 self.playlist.delete_chat(chat_id)
@@ -231,8 +270,26 @@ class Call:
         playlist = self.playlist.playlist
         if chat_id in playlist and len(playlist[chat_id]) > 1:
             title = await self._change_stream(chat_id)
-            return await self.bot.send_message(chat_id, "track_skipped", title)
+            return await self.bot.send_message(
+                chat_id, "track_skipped", title, delete=5
+            )
         return await self.bot.send_message(chat_id, "no_playlists")
+
+    async def join_chat(self, chat_id: int):
+        link = await self.bot.export_chat_invite_link(chat_id)
+        if "+" in link:
+            link_hash = (link.replace("+", "")).split("t.me/")[1]
+            try:
+                await self.user.join_chat(f"https://t.me/joinchat/{link_hash}")
+                client_user_id = (await self.user.get_me()).id
+                await self.bot.promote_member(chat_id, client_user_id)
+            except ChatAdminRequired:
+                self.playlist.delete_chat(chat_id)
+                return await self.bot.send_message(chat_id, "need_add_user_permission")
+            except UserAlreadyParticipant:
+                pass
+            await asyncio.sleep(3)
+            await self.bot.revoke_chat_invite_link(chat_id, link)
 
     def send_playlist(self, chat_id: int):
         playlist = self.playlist.playlist

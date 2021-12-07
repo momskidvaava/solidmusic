@@ -8,19 +8,48 @@ class Scaffold:
 
     def init(self):
         cur = self.cur
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS chat_db
-            (owner_id integer, chat_id integer, lang text, quality text, admin_only boolean);
-            """
-        )
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sudo_db
-            (chat_id integer, user_id integer);
-            """
-        )
         try:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chat_db
+                (
+                owner_id integer, 
+                chat_id integer, 
+                lang text, 
+                quality text, 
+                admin_only boolean, 
+                gcast_type text,
+                del_cmd_mode boolean,
+                player_mode boolean
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sudo_db
+                (chat_id integer, user_id integer);
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE chat_db
+                ADD player_mode boolean
+                DEFAULT 1
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE chat_db
+                ADD del_cmd_mode boolean
+                DEFAULT 1
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE chat_db
+                ADD gcast_type text
+                """
+            )
             cur.execute(
                 """
                 ALTER TABLE chat_db
@@ -30,7 +59,11 @@ class Scaffold:
             cur.execute(
                 """
                 ALTER TABLE chat_db
-                ADD quality text"""
+                ADD quality text
+                """
             )
         except sqlite3.OperationalError:
             pass
+
+    def close(self):
+        return self.cur.close()
