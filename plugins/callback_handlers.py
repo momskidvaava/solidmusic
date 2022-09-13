@@ -105,19 +105,6 @@ async def _close_button(_, cb: CallbackQuery):
         modules.clear()
 
 
-@Client.on_callback_query(filters.regex(pattern=r"set_lang_(.*)"))
-async def _change_lang(_, cb: CallbackQuery):
-    lang = cb.matches[0].group(1)
-    chat_id = cb.message.chat.id
-    set_lang = ChatDB().set_lang(chat_id, lang)
-    await cb.message.edit(
-        gm(chat_id, set_lang),
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton(gm(chat_id, "channel"), url=config.CHANNEL_LINK)]]
-        ),
-    )
-
-
 @Client.on_callback_query(filters.regex("goback"))
 async def goback(client: Client, hee: CallbackQuery):
     bot_username = (await client.get_me()).username
