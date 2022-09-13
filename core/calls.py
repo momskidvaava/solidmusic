@@ -154,26 +154,22 @@ class Call:
                         peer=await users.resolve_peer(chat_id),
                         random_id=random.randint(10000, 999999999),
                     )
-                )
-                await self.bot.send_message(chat_id, "call_started")
+                )              
             else:
                 pass
         except (ChannelPrivate, ChatForbidden):
             try:
                 await self.bot.unban_member(chat_id, (await self.bot.get_me()).id)
                 await self.start_call(chat_id)
-            except PeerIdInvalid:
-                await users.send_message((await self.bot.get_me()).id, "/start")
+            except PeerIdInvalid:               
                 await self.start_call(chat_id)
             except (ChatForbidden, ChannelPrivate):
-                self.playlist.delete_chat(chat_id)
-                return await self.bot.send_message(chat_id, "user_banned")
+                self.playlist.delete_chat(chat_id)              
         except ChatAdminRequired:
             try:
                 await self.bot.promote_member(chat_id, (await users.get_me()).id)
                 await self.start_call(chat_id)
-            except PeerIdInvalid:
-                await users.send_message((await self.bot.get_me()).id, "/start")
+            except PeerIdInvalid:               
                 await self.bot.promote_member(chat_id, (await users.get_me()).id)
                 await self.start_call(chat_id)
 
@@ -182,30 +178,22 @@ class Call:
         try:
             call = await self.call.get_call(chat_id)
             await self.user.send(DiscardGroupCall(call=call))
-            await self.bot.send_message(chat_id, "call_closed")
-        except GroupCallNotFound:
-            await self.bot.send_message(chat_id, "no_active_group_call")
-
+            
     async def change_vol(self, chat_id: int, volume: int):
         call = self.call
         is_active = self.is_call_active(chat_id)
         if is_active:
             await call.change_volume_call(chat_id, volume)
-            return await self.bot.send_message(chat_id, "volume_changed", str(volume))
-        return await self.bot.send_message(chat_id, "not_in_call")
-
+            
     async def change_streaming_status(self, status: str, chat_id: int):
         call = self.call
         is_active = self.is_call_active(chat_id)
         if is_active:
             if status == "pause":
-                await call.pause_stream(chat_id)
-                return "track_paused"
+                await call.pause_stream(chat_id)             
             if status == "resume":
                 await call.resume_stream(chat_id)
-                return "track_resumed"
-        else:
-            return "not_in_call"
+                
 
     async def end_stream(self, chat_id: int):
         call = self.call
@@ -213,8 +201,7 @@ class Call:
         if is_active:
             await call.leave_group_call(chat_id)
             self.playlist.delete_chat(chat_id)
-            return "stream_ended"
-        return "not_in_call"
+            
 
     async def _change_stream(self, chat_id: int):
         playlist = self.playlist
@@ -258,8 +245,7 @@ class Call:
         call = self.call
         if playlist and chat_id in playlist:
             if len(playlist[chat_id]) > 1:
-                title = await self._change_stream(chat_id)
-                await self.bot.send_message(chat_id, "track_changed", title, delete=5)
+                title = await self._change_stream(chat_id)               
             elif len(playlist[chat_id]) == 1:
                 await call.leave_group_call(chat_id)
                 self.playlist.delete_chat(chat_id)
@@ -269,12 +255,8 @@ class Call:
     async def change_stream(self, chat_id: int):
         playlist = self.playlist.playlist
         if chat_id in playlist and len(playlist[chat_id]) > 1:
-            title = await self._change_stream(chat_id)
-            return await self.bot.send_message(
-                chat_id, "track_skipped", title, delete=5
-            )
-        return await self.bot.send_message(chat_id, "no_playlists")
-
+            title = await self._change_stream(chat_id)          
+        
     async def join_chat(self, chat_id: int):
         link = await self.bot.export_chat_invite_link(chat_id)
         if "+" in link:
@@ -284,8 +266,7 @@ class Call:
                 client_user_id = (await self.user.get_me()).id
                 await self.bot.promote_member(chat_id, client_user_id)
             except ChatAdminRequired:
-                self.playlist.delete_chat(chat_id)
-                return await self.bot.send_message(chat_id, "need_add_user_permission")
+                self.playlist.delete_chat(chat_id)              
             except UserAlreadyParticipant:
                 pass
             await asyncio.sleep(3)
