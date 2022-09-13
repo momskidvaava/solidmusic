@@ -13,8 +13,7 @@ from .calls import Call
 
 class YoutubePlayer(Call):
     async def _play(
-        self,
-        mess: Message,
+        self,      
         chat_id: int,
         user_id: int,
         audio_url: str,
@@ -42,37 +41,26 @@ class YoutubePlayer(Call):
                 AudioPiped(audio_url, audio_quality),
                 stream_type=StreamType().local_stream,
             )
-            return await mess.edit(
-                f"""
-{gm(chat_id, 'now_streaming')}
-📌 {gm(chat_id, 'yt_title')}: [{title}](https://t.me/{bot_username}?start=ytinfo_{yt_id})
-⏱️ {gm(chat_id, 'duration')}: {duration}
-✨ {gm(chat_id, 'req_by')}: {mention}
-🎥 {gm(chat_id, 'stream_type_title')}: {gm(chat_id, 'stream_type_music')}
-""",
-                disable_web_page_preview=True,
-            )
+            return 
         except NoActiveGroupCall:
             await self.join_chat(chat_id)
             await self.start_call(chat_id)
             await self._play(
-                mess, chat_id, user_id, audio_url, title, duration, yt_url, yt_id
+                chat_id, user_id, audio_url, title, duration, yt_url, yt_id
             )
-        except FloodWait as Fw:
-            await mess.edit(gm(chat_id, "error_flood".format(str(Fw.x))))
+        except FloodWait as Fw:           
             await sleep(Fw.x)
             await self._play(
-                mess, chat_id, user_id, audio_url, title, duration, yt_url, yt_id
+                chat_id, user_id, audio_url, title, duration, yt_url, yt_id
             )
         except UserNotParticipant:
             await self.join_chat(chat_id)
             await self._play(
-                mess, chat_id, user_id, audio_url, title, duration, yt_url, yt_id
+                 chat_id, user_id, audio_url, title, duration, yt_url, yt_id
             )
 
     async def _video_play(
-        self,
-        mess: Message,
+        self,      
         chat_id: int,
         user_id: int,
         video_url: str,
@@ -100,32 +88,22 @@ class YoutubePlayer(Call):
                 AudioVideoPiped(video_url, audio_quality, video_quality),
                 stream_type=StreamType().local_stream,
             )
-            return await mess.edit(
-                f"""
-{gm(chat_id, 'now_streaming')}
-📌 {gm(chat_id, 'yt_title')}: [{title}](https://t.me/{bot_username}?start=ytinfo_{yt_id})
-⏱️ {gm(chat_id, 'duration')}: {duration}
-✨ {gm(chat_id, 'req_by')}: {mention}
-🎥 {gm(chat_id, 'stream_type_title')}: {gm(chat_id, 'stream_type_video')}
-""",
-                disable_web_page_preview=True,
-            )
+            
         except NoActiveGroupCall:
             await self.join_chat(chat_id)
             await self.start_call(chat_id)
             await self._video_play(
-                mess, chat_id, user_id, video_url, title, duration, yt_url, yt_id
+                 chat_id, user_id, video_url, title, duration, yt_url, yt_id
             )
-        except FloodWait as Fw:
-            await mess.edit(gm(chat_id, "error_flood".format(str(Fw.x))))
+        except FloodWait as Fw:           
             await sleep(Fw.x)
             await self._video_play(
-                mess, chat_id, user_id, video_url, title, duration, yt_url, yt_id
+                 chat_id, user_id, video_url, title, duration, yt_url, yt_id
             )
         except UserNotParticipant:
             await self.join_chat(chat_id)
             await self._video_play(
-                mess, chat_id, user_id, video_url, title, duration, yt_url, yt_id
+                 chat_id, user_id, video_url, title, duration, yt_url, yt_id
             )
 
     async def play(
@@ -142,16 +120,12 @@ class YoutubePlayer(Call):
         if playlist and chat_id in playlist and len(playlist[chat_id]) >= 1:
             self.init_youtube_player(
                 chat_id, user_id, title, duration, yt_url, yt_id, "music"
-            )
-            mess = await cb.edit_message_text(gm(chat_id, "track_queued"))
-            await sleep(5)
-            return await mess.delete()
-        mess = await cb.edit_message_text(gm(chat_id, "process"))
+            )          
+            await sleep(5)                  
         audio_url = get_audio_direct_link(yt_url)
         await self._play(
-            mess, chat_id, user_id, audio_url, title, duration, yt_url, yt_id
+            chat_id, user_id, audio_url, title, duration, yt_url, yt_id
         )
-
     async def video_play(
         self,
         cb: CallbackQuery,
@@ -166,12 +140,9 @@ class YoutubePlayer(Call):
         if playlist and chat_id in playlist and len(playlist[chat_id]) >= 1:
             self.init_youtube_player(
                 chat_id, user_id, title, duration, yt_url, yt_id, "video"
-            )
-            mess = await cb.edit_message_text(gm(chat_id, "track_queued"))
-            await sleep(5)
-            return await mess.delete()
-        mess = await cb.edit_message_text(gm(chat_id, "process"))
+            )          
+            await sleep(5)                
         video_url = get_video_direct_link(yt_url)
         await self._video_play(
-            mess, chat_id, user_id, video_url, title, duration, yt_url, yt_id
+            chat_id, user_id, video_url, title, duration, yt_url, yt_id
         )
